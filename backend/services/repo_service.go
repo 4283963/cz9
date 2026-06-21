@@ -3,28 +3,77 @@ package services
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github-repo-manager/models"
 )
 
+const maxConcurrent = 3
+
+type RepoTask struct {
+	ID       uint
+	Private  bool
+	Template string
+}
+
 type RepoService struct {
 	workspaceDir string
 	scriptPath   string
+	taskQueue    chan RepoTask
+	once         sync.Once
+	dbMutex      sync.Mutex
 }
 
 func NewRepoService() *RepoService {
 	wd, _ := os.Getwd()
-	return &RepoService{
+	s := &RepoService{
 		workspaceDir: filepath.Join(wd, "workspace"),
 		scriptPath:   filepath.Join(wd, "scripts", "create_repo.sh"),
+		taskQueue:    make(chan RepoTask, 1000),
+	}
+	s.startWorkers()
+	return s
+}
+
+func (s *RepoService) startWorkers() {
+	s.once.Do(func() {
+		for i := 0; i < maxConcurrent; i++ {
+			go s.worker(i + 1)
+		}
+		log.Printf("Worker pool started with %d workers", maxConcurrent)
+	})
+}
+
+func (s *RepoService) worker(id int) {
+	log.Printf("Worker %d started", id)
+	for task := range s.taskQueue {
+		log.Printf("Worker %d: processing repo task id=%d", id, task.ID)
+		var repo models.Repo
+		if err := models.DB.First(&repo, task.ID).Error; err != nil {
+			log.Printf("Worker %d: repo %d not found, skipping: %v", id, task.ID, err)
+			continue
+		}
+		s.CreateRepo(&repo, task.Private, task.Template)
+		log.Printf("Worker %d: finished repo %s (status=%s)", id, repo.Name, repo.Status)
 	}
 }
 
+func (s *RepoService) Submit(task RepoTask) {
+	s.taskQueue <- task
+}
+
+func (s *RepoService) QueueLen() int {
+	return len(s.taskQueue)
+}
+
 func (s *RepoService) appendLog(repo *models.Repo, msg string) {
+	s.dbMutex.Lock()
+	defer s.dbMutex.Unlock()
 	now := time.Now().Format("15:04:05")
 	line := fmt.Sprintf("[%s] %s\n", now, msg)
 	repo.Log += line
@@ -32,6 +81,8 @@ func (s *RepoService) appendLog(repo *models.Repo, msg string) {
 }
 
 func (s *RepoService) updateStatus(repo *models.Repo, status models.RepoStatus) {
+	s.dbMutex.Lock()
+	defer s.dbMutex.Unlock()
 	repo.Status = status
 	repo.UpdatedAt = time.Now()
 	if status == models.StatusSuccess || status == models.StatusFailed {

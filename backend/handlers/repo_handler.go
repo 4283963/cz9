@@ -71,18 +71,17 @@ func (h *RepoHandler) BatchCreate(c *gin.Context) {
 		repos = append(repos, repo)
 	}
 
-	go func() {
-		for _, repo := range repos {
-			go func(r models.Repo) {
-				var latest models.Repo
-				models.DB.First(&latest, r.ID)
-				h.service.CreateRepo(&latest, req.Private, req.Template)
-			}(repo)
-		}
-	}()
+	for _, repo := range repos {
+		h.service.Submit(services.RepoTask{
+			ID:       repo.ID,
+			Private:  req.Private,
+			Template: req.Template,
+		})
+	}
 
 	c.JSON(http.StatusAccepted, gin.H{
-		"message": fmt.Sprintf("已提交 %d 个仓库创建任务", len(repos)),
+		"message": fmt.Sprintf("已提交 %d 个仓库创建任务，后台正在后台排队处理中（并发 %d）", len(repos), 3),
+		"queue":   h.service.QueueLen(),
 		"data":    repos,
 	})
 }
@@ -111,14 +110,15 @@ func (h *RepoHandler) RetryRepo(c *gin.Context) {
 	repo.FinishedAt = nil
 	models.DB.Save(&repo)
 
-	go func(r models.Repo) {
-		var latest models.Repo
-		models.DB.First(&latest, r.ID)
-		h.service.CreateRepo(&latest, req.Private, req.Template)
-	}(repo)
+	h.service.Submit(services.RepoTask{
+		ID:       repo.ID,
+		Private:  req.Private,
+		Template: req.Template,
+	})
 
 	c.JSON(http.StatusAccepted, gin.H{
-		"message": fmt.Sprintf("已重新提交仓库 %s 的创建任务", repo.Name),
+		"message": fmt.Sprintf("已重新提交仓库 %s 的创建任务，排队中", repo.Name),
+		"queue":   h.service.QueueLen(),
 		"data":    repo,
 	})
 }

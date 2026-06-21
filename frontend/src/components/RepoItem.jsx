@@ -60,6 +60,13 @@ export default function RepoItem({ repo, expanded, onToggleLog, onRetry, onDelet
         </span>
       </div>
 
+      {repo.status === 'failed' && repo.error_message && (
+        <div className="error-banner">
+          <span className="error-icon">⚠️</span>
+          <span className="error-text">{repo.error_message}</span>
+        </div>
+      )}
+
       <div className="progress-track">
         <div
           className={`progress-bar ${info.badge}`}

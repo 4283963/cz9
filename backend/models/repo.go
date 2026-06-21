@@ -16,14 +16,15 @@ const (
 )
 
 type Repo struct {
-	ID          uint       `gorm:"primaryKey" json:"id"`
-	Name        string     `gorm:"not null;index" json:"name"`
-	Description string     `json:"description"`
-	Status      RepoStatus `gorm:"default:pending;index" json:"status"`
-	Log         string     `gorm:"type:text" json:"log"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	FinishedAt  *time.Time `json:"finished_at,omitempty"`
+	ID           uint       `gorm:"primaryKey" json:"id"`
+	Name         string     `gorm:"not null;index" json:"name"`
+	Description  string     `json:"description"`
+	Status       RepoStatus `gorm:"default:pending;index" json:"status"`
+	Log          string     `gorm:"type:text" json:"log"`
+	ErrorMessage string     `gorm:"type:varchar(255)" json:"error_message,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	FinishedAt   *time.Time `json:"finished_at,omitempty"`
 }
 
 type BatchCreateRequest struct {

@@ -107,6 +107,7 @@ func (h *RepoHandler) RetryRepo(c *gin.Context) {
 
 	repo.Status = models.StatusPending
 	repo.Log = ""
+	repo.ErrorMessage = ""
 	repo.FinishedAt = nil
 	models.DB.Save(&repo)
 
